@@ -18,7 +18,8 @@ import dataclasses
 import typing
 
 from gon import GON
-from hdtree import HDTreeClassifier, Node, simplify_rules, FixedValueSplit, TwentyQuantileSplit, TenQuantileRangeSplit, EntropyMeasure, AbstractSplitRule
+from hdtree import HDTreeClassifier, Node, simplify_rules, FixedValueSplit, TwentyQuantileSplit, TenQuantileRangeSplit, \
+    EntropyMeasure, GiniMeasure, AbstractSplitRule
 from typing import List, Optional
 import numpy as np
 import dacite
@@ -73,6 +74,9 @@ class Concept:
     """
     simplified_node_came_from_nerd_tree: List[bool]
 
+    """ original attributes / features when deriving the concept"""
+    original_attribute_names: List[str]
+
 def generate_assignment_trees_iterator(gon: GON,
                                        feature_names: List[str],
                                        only_use_important_attributes: bool = True,
@@ -104,14 +108,11 @@ def generate_assignment_trees_iterator(gon: GON,
         importance = gon.get_important_feature_indexer()
     else:
         importance = np.ones(len(feature_names),
-                             dtype=np.bool)
+                             dtype=bool)
 
     params_for_tree = dict(max_levels=max_levels,
-                           allowed_splits=[
-                                           FixedValueSplit.build(),
-                                           TwentyQuantileSplit.build(),
-                                           TenQuantileRangeSplit.build()],
-                           information_measure=EntropyMeasure(),
+                           allowed_splits=allowed_splits,
+                           information_measure=GiniMeasure(),
                            attribute_names=np.array(feature_names)[importance],
                            min_samples_at_leaf=min(5, len(gon.get_DSEL())),
                            verbose=False)
@@ -120,7 +121,7 @@ def generate_assignment_trees_iterator(gon: GON,
     for model_idx, assignment in assignments.items():
         if not only_for_model_indices or model_idx in only_for_model_indices:
             indexer_for_model = np.zeros(len(all_data),
-                                         dtype=np.bool)
+                                         dtype=bool)
             indexer_for_model[assignment] = True
             tree = HDTreeClassifier(**params_for_tree)
             tree.fit(all_data[:, importance], np.where(indexer_for_model,
@@ -161,7 +162,7 @@ def gather_concepts(gon: GON,
                     use_simplified_trees: bool = False,
                     nerd_trees: List[HDTreeClassifier] = None,
                     max_levels: int = 4,
-                    allowed_splits: Optional[AbstractSplitRule] = None,
+                    allowed_splits: Optional[List[AbstractSplitRule]] = None,
                     ass_trees: List[HDTreeClassifier] = None) -> List[Concept]:
     """
     :param gon:
@@ -246,7 +247,7 @@ def gather_concepts(gon: GON,
                     continue
 
                 # same_flow = assignment_sample[flow_samples_mask]
-                y_sample = assignment_targets[flow_samples_mask].astype(np.str)
+                y_sample = assignment_targets[flow_samples_mask].astype(str)
                 prec = sum(y_sample == [str(concept)]) / sum(flow_samples_mask)
                 cov = sum(flow_samples_mask) / len(expert_data_gon)
 
@@ -257,7 +258,10 @@ def gather_concepts(gon: GON,
                 data_point = expert_data_gon[assignment_leaf_node.get_data_indices()][flow_samples_mask][0]
                 rules_simplified = simplify_rules(rules=rules_complete,
                                                   model_to_sample={nerd_tree: data_point,
-                                                                   ass_tree: data_point[gon.get_important_feature_indexer()]})
+                                                                   ass_tree: data_point[
+                                                                       gon.get_important_feature_indexer()
+                                                                   ]}
+                                                  )
 
                 chain = nerd_tree.follow_node_to_root(node=leaf_nerd)
                 # nerd_conditions_nodes.append(chain)
@@ -269,13 +273,14 @@ def gather_concepts(gon: GON,
 
                 # gather expected rule outcomes assignment trees on sample
                 is_nerd_tree = [rule.get_tree() is nerd_tree for rule in rules_simplified]
-
+                nodes_simplified = [rule.get_node() for rule in rules_simplified
+                                      if rule.get_node().get_split_rule() is not None]
                 concept_description = Concept(
                     target_concept=concept_readable,
                     nodes_complete=nodes_complete,
                     nodes_expert=chain,
                     nodes_assignment=assignment_conditions_nodes[assignment_option_idx],
-                    nodes_simplified=[node for node in nodes_complete if node.get_split_rule() is not None],
+                    nodes_simplified=nodes_simplified,
                     simplified_node_came_from_nerd_tree=is_nerd_tree,
                     readable_rules=readable_rules,
                     precision=prec,
@@ -284,6 +289,7 @@ def gather_concepts(gon: GON,
                     nerd_idx=tree_index,
                     assignment_feature_mask=list(gon.get_important_feature_indexer()),
                     sample_dummy=list(data_point),
+                    original_attribute_names=feature_names,
                 )
 
                 concepts.append(concept_description)

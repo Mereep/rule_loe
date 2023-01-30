@@ -150,7 +150,7 @@ class RuleGon:
         :return:
         """
         X_expert = np.atleast_2d(X_expert)
-        res = np.ndarray((len(X_expert),), dtype=np.object)
+        res = np.ndarray((len(X_expert),), dtype=np.object_)
         res[:] = ''
         possible_outcomes = None
         if positive_class is not None:
@@ -184,7 +184,7 @@ class RuleGon:
                 concept, clause = pred
                 res[i] = concept.target_concept
 
-        return res.astype(np.str)
+        return res.astype(str)
 
     def get_unique_labels(self) -> Dict[str, float]:
         """
@@ -412,7 +412,7 @@ class RuleGon:
 
         assert len(X) == len(X_expert), "X and X expert differ in length (Code: 3204823094)"
 
-        y_gon = gon.predict(X=X, X_expert=X_expert).astype(np.str)
+        y_gon = gon.predict(X=X, X_expert=X_expert).astype(str)
         y_self = self.predict(X_expert)
 
         return sum(y_gon == y_self) / len(y_gon)
