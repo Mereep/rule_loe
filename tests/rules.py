@@ -37,7 +37,7 @@ class RulesTest(unittest.TestCase):
             np.random.normal(size=(100, 3), scale=0.5) + (10, 10, 10),
         ]), newshape=(-1, 3))
 
-        self.y_dummy = np.reshape(np.array([np.ones(100) * i for i in range(8)]), -1).astype(np.str)
+        self.y_dummy = np.reshape(np.array([np.ones(100) * i for i in range(8)]), -1).astype(str)
 
 
     def test_rule_generation(self):
