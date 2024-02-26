@@ -16,8 +16,8 @@
 """
 import unittest
 import numpy as np
-from gon import GON
-from rule_gon import RuleGon
+from loe import LoE
+from rule_loe import RuleLoE
 from hdtree import HDTreeClassifier, TwentyQuantileSplit, EntropyMeasure
 from sklearn.metrics import accuracy_score
 
@@ -56,22 +56,22 @@ class RulesTest(unittest.TestCase):
 
         trees = [HDTreeClassifier(**params) for i in range(4)]
 
-        gon = GON(pool_classifiers=trees,
+        loe = LoE(pool_classifiers=trees,
                   step_size=1,
                   max_jobs=1,
                   val_perc=0.,
                   random_state=42,
                   iterations=8)
 
-        gon.fit(X, y)
+        loe.fit(X, y)
 
-        self.assertAlmostEqual(gon.score(X, y), 1, 1, "This problem should be solveable to (almost) 100%")
-        rule_pred = RuleGon.from_gon_instance(gon=gon,
+        self.assertAlmostEqual(loe.score(X, y), 1, 1, "This problem should be solveable to (almost) 100%")
+        rule_pred = RuleLoE.from_loe_instance(loe=loe,
                                               max_length_assignment=3)
         y_hat = rule_pred.predict(X)
-        self.assertAlmostEqual(gon.score(X, y),
+        self.assertAlmostEqual(loe.score(X, y),
                                accuracy_score(y_true=y, y_pred=y_hat), 1, "Approximated rules should almost have the"
-                                                                       "same performance as GoN itself")
+                                                                       "same performance as LoE itself")
 
         # remove rule with minimal coverage
         n_rules_before = len(rule_pred.concepts_and_rules)
@@ -90,6 +90,6 @@ class RulesTest(unittest.TestCase):
                                                   f"cannot be predicted anymore (there should be only one rule"
                                                   f"predicting it before)")
 
-        self.assertGreater(gon.score(X, y),
+        self.assertGreater(loe.score(X, y),
                            accuracy_score(y_true=y, y_pred=y_hat),
                            "After removing rules the score should decrease")

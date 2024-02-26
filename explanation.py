@@ -17,7 +17,7 @@
 import dataclasses
 import typing
 
-from gon import GON
+from loe import LoE
 from hdtree import HDTreeClassifier, Node, simplify_rules, FixedValueSplit, TwentyQuantileSplit, TenQuantileRangeSplit, \
     EntropyMeasure, GiniMeasure, AbstractSplitRule
 from typing import List, Optional
@@ -28,7 +28,7 @@ import dacite
 LABEL_EXPERT = 'Expert'
 LABEL_NO_EXPERT = 'No Expert'
 
-@dataclasses.dataclass(kw_only=True)
+@dataclasses.dataclass(frozen=True)
 class Concept:
     """ A Concept is a dpecific rule with meta data and label """
 
@@ -60,7 +60,7 @@ class Concept:
     """ if concepts derives from a simplified (pruned) tree """
     simplified_tree: bool
 
-    """ original index of the nerd of the GoN where the info derived from """
+    """ original index of the nerd of the LoE where the info derived from """
     nerd_idx: int
 
     """ which of the experts' features are used in assignment tree? """
@@ -77,7 +77,7 @@ class Concept:
     """ original attributes / features when deriving the concept"""
     original_attribute_names: List[str]
 
-def generate_assignment_trees_iterator(gon: GON,
+def generate_assignment_trees_iterator(loe: LoE,
                                        feature_names: List[str],
                                        only_use_important_attributes: bool = True,
                                        only_for_model_indices: Optional[List[int]] = None,
@@ -86,10 +86,10 @@ def generate_assignment_trees_iterator(gon: GON,
     """
     Will generate a decision tree that learns the assignment function from data point to model
 
-    :param gon: GoN model
+    :param loe: LoE model
     :param feature_names: names for each feature has to match amount of features
     :param only_use_important_attributes:
-    :param only_for_model_indices: will not create an assignment tree for all GoN models (default) but only for listed
+    :param only_for_model_indices: will not create an assignment tree for all LoE models (default) but only for listed
     :param allowed_splits:
     :param max_levels: how much to grow max?
     :return:
@@ -100,12 +100,12 @@ def generate_assignment_trees_iterator(gon: GON,
                                         TenQuantileRangeSplit.build()
     ]
 
-    all_data = gon.get_expert_data()
-    assignments = gon.assign_data_points_to_model(gon.get_train_data(processed=True),
+    all_data = loe.get_expert_data()
+    assignments = loe.assign_data_points_to_model(loe.get_train_data(processed=True),
                                                   is_processed=True)
 
     if only_use_important_attributes is True:
-        importance = gon.get_important_feature_indexer()
+        importance = loe.get_important_feature_indexer()
     else:
         importance = np.ones(len(feature_names),
                              dtype=bool)
@@ -114,7 +114,7 @@ def generate_assignment_trees_iterator(gon: GON,
                            allowed_splits=allowed_splits,
                            information_measure=GiniMeasure(),
                            attribute_names=np.array(feature_names)[importance],
-                           min_samples_at_leaf=min(5, len(gon.get_DSEL())),
+                           min_samples_at_leaf=min(5, len(loe.get_DSEL())),
                            verbose=False)
 
     trees = []
@@ -132,7 +132,7 @@ def generate_assignment_trees_iterator(gon: GON,
             yield tree
 
 
-def generate_assignment_trees(gon: GON,
+def generate_assignment_trees(loe: LoE,
                               feature_names: List[str],
                               only_use_important_attributes: bool = True,
                               only_for_model_indices: Optional[List[int]] = None,
@@ -142,7 +142,7 @@ def generate_assignment_trees(gon: GON,
     """
     A wrapper of @see generate_assignment_trees_generate_assignment_trees_iterator
 
-    :param gon:
+    :param loe:
     :param feature_names:
     :param only_use_important_attributes:
     :param only_for_model_indices:
@@ -151,13 +151,13 @@ def generate_assignment_trees(gon: GON,
     :return:
     """
     return [*generate_assignment_trees_iterator(feature_names=feature_names,
-                                                gon=gon,
+                                                loe=loe,
                                                 only_use_important_attributes=only_use_important_attributes,
                                                 only_for_model_indices=only_for_model_indices,
                                                 allowed_splits=allowed_splits,
                                                 max_levels=max_levels)]
 
-def gather_concepts(gon: GON,
+def gather_concepts(loe: LoE,
                     feature_names: List[str],
                     use_simplified_trees: bool = False,
                     nerd_trees: List[HDTreeClassifier] = None,
@@ -165,11 +165,11 @@ def gather_concepts(gon: GON,
                     allowed_splits: Optional[List[AbstractSplitRule]] = None,
                     ass_trees: List[HDTreeClassifier] = None) -> List[Concept]:
     """
-    :param gon:
+    :param loe:
     :param feature_names: names for each feature (complete features, do not care for importance-handling)
     :param use_simplified_trees: Will prune the trees before extracting rules. If nerd_trees and assignment trees are
     this parameter is ignored
-    :param ass_trees: trees that model the decision process for assignment / selection of GoN
+    :param ass_trees: trees that model the decision process for assignment / selection of LoE
     :param allowed_splits
     :param max_levels:assignment tree max depth
 
@@ -179,7 +179,7 @@ def gather_concepts(gon: GON,
     if nerd_trees is not None:
         trees = nerd_trees
     else:
-        trees = gon.pool_classifiers_
+        trees = loe.pool_classifiers_
         if use_simplified_trees:
             trees = [tree.simplify(return_copy=True) for tree in trees]
 
@@ -187,14 +187,14 @@ def gather_concepts(gon: GON,
         assert len(ass_trees) == len(trees), "Amount of assignment trees and nerd" \
                                              " trees does not match (Code: 893478923)"
     else:
-        ass_trees = generate_assignment_trees(gon=gon, feature_names=feature_names,
+        ass_trees = generate_assignment_trees(loe=loe, feature_names=feature_names,
                                               only_use_important_attributes=True,
                                               allowed_splits=allowed_splits,
                                               max_levels=max_levels)
         if use_simplified_trees:
             ass_trees = [tree.simplify(return_copy=False) for tree in ass_trees]
 
-    expert_data_gon = gon.get_expert_data()
+    expert_data_loe = loe.get_expert_data()
     concepts: List[Concept] = []
 
     for tree_index, ass_tree in enumerate(ass_trees):
@@ -228,7 +228,7 @@ def gather_concepts(gon: GON,
         for leaf_nerd in leafs_nerd:
             # get the leafs decision
             concept = nerd_tree.get_prediction_for_node(node=leaf_nerd)
-            concept_readable = gon.enc_.inverse_transform([concept])[0]
+            concept_readable = loe.enc_.inverse_transform([concept])[0]
             nerd_chain = nerd_tree.follow_node_to_root(leaf_nerd) + [leaf_nerd]
 
             # now check each possible way that lands at that expert
@@ -236,8 +236,8 @@ def gather_concepts(gon: GON,
 
                 # get all samples withing current assignment node
                 assignment_leaf_node = assignment_conditions_nodes[assignment_option_idx][-1]
-                assignment_sample = gon.get_expert_data()[assignment_leaf_node.get_data_indices()]
-                assignment_targets = gon.get_train_targets()[assignment_leaf_node.get_data_indices()]
+                assignment_sample = loe.get_expert_data()[assignment_leaf_node.get_data_indices()]
+                assignment_targets = loe.get_train_targets()[assignment_leaf_node.get_data_indices()]
 
                 # get all samples that are in assignment model AND follow expert path to current leaf
                 flow_samples_mask = [nerd_tree.extract_node_chain_for_sample(dp)[-1] == leaf_nerd for dp in
@@ -249,17 +249,17 @@ def gather_concepts(gon: GON,
                 # same_flow = assignment_sample[flow_samples_mask]
                 y_sample = assignment_targets[flow_samples_mask].astype(str)
                 prec = sum(y_sample == [str(concept)]) / sum(flow_samples_mask)
-                cov = sum(flow_samples_mask) / len(expert_data_gon)
+                cov = sum(flow_samples_mask) / len(expert_data_loe)
 
                 # option_ass_conditions_nodes = assignment_conditions_nodes[assignment_option_idx]
                 nodes_complete = assignment_conditions_nodes[assignment_option_idx][:-1] + nerd_chain[:-1]
                 rules_complete = [node.get_split_rule() for node in nodes_complete if node.get_split_rule() is not None]
 
-                data_point = expert_data_gon[assignment_leaf_node.get_data_indices()][flow_samples_mask][0]
+                data_point = expert_data_loe[assignment_leaf_node.get_data_indices()][flow_samples_mask][0]
                 rules_simplified = simplify_rules(rules=rules_complete,
                                                   model_to_sample={nerd_tree: data_point,
                                                                    ass_tree: data_point[
-                                                                       gon.get_important_feature_indexer()
+                                                                       loe.get_important_feature_indexer()
                                                                    ]}
                                                   )
 
@@ -268,7 +268,7 @@ def gather_concepts(gon: GON,
 
                 readable_rules = [
                     rule.explain_split(sample=data_point if rule.get_tree() is nerd_tree else data_point[
-                        gon.get_important_feature_indexer()], hide_sample_specifics=True)
+                        loe.get_important_feature_indexer()], hide_sample_specifics=True)
                     for rule in rules_simplified]
 
                 # gather expected rule outcomes assignment trees on sample
@@ -287,7 +287,7 @@ def gather_concepts(gon: GON,
                     coverage=cov,
                     simplified_tree=use_simplified_trees,
                     nerd_idx=tree_index,
-                    assignment_feature_mask=list(gon.get_important_feature_indexer()),
+                    assignment_feature_mask=list(loe.get_important_feature_indexer()),
                     sample_dummy=list(data_point),
                     original_attribute_names=feature_names,
                 )

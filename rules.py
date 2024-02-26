@@ -14,11 +14,11 @@
 # @email: richard.vogel@hs-mittweida.de
 # @created: 03.04.2020
 """
-from rule_gon import Concept, gather_concepts, simplify_rules
+from rule_loe import Concept, gather_concepts, simplify_rules
 from typing import Optional, List, Tuple, Dict, Callable
 import numpy as np
 from hdtree import AbstractSplitRule
-from gon import GON
+from loe import LoE
 from hdtree import HDTreeClassifier
 from functools import reduce
 from sklearn.utils import check_X_y
@@ -106,7 +106,7 @@ class RuleClause:
         return sum(equals) / len(self.get_expected_outcome())
 
 
-class RuleGon:
+class RuleLoE:
     def __init__(self, concepts: List[Concept], min_precision: float = 0.5,
                  min_coverage: float = 0.01):
         """
@@ -202,17 +202,16 @@ class RuleGon:
         return d
 
     @classmethod
-    def from_gon_instance(cls, gon: GON, max_length_assignment: int = 4, *args, **kwargs):
-        assert gon.is_fitted(), "GoN has to be fit on data (Code: 234982340)"
-        assert np.all([isinstance(clf, HDTreeClassifier) for clf in gon.pool_classifiers_]), "Only HDTrees are supported" \
+    def from_loe_instance(cls, loe: LoE, max_length_assignment: int = 4, *args, **kwargs):
+        assert loe.is_fitted(), "LoE has to be fit on data (Code: 234982340)"
+        assert np.all([isinstance(clf, HDTreeClassifier) for clf in loe.pool_classifiers_]), "Only HDTrees are supported" \
                                                                                              " atm (Code: 98490238)"
 
-        concepts = gather_concepts(gon, feature_names=gon.pool_classifiers_[0].get_attribute_names(),
+        concepts = gather_concepts(loe, feature_names=loe.pool_classifiers_[0].get_attribute_names(),
                                    use_simplified_trees=True,
                                    max_levels=max_length_assignment)
 
-        rules = rules_from_concepts(concepts=concepts)
-        me = cls(concepts_and_rules=[*zip(concepts, rules)], *args, **kwargs)
+        me = cls(concepts=concepts, *args, **kwargs)
 
         return me
 
@@ -395,11 +394,11 @@ class RuleGon:
 
         return covered / (i+1)          # cannot divide by zero
 
-    def calculate_agreement_with_gon(self, gon: GON, X: np.ndarray, X_expert: Optional[np.ndarray]=None) -> float:
+    def calculate_agreement_with_loe(self, loe: LoE, X: np.ndarray, X_expert: Optional[np.ndarray]=None) -> float:
         """
-        Will calculate the proportion of the data where GoN and ourselves have the
+        Will calculate the proportion of the data where LoE and ourselves have the
         same outcome (prediction)
-        :param gon:
+        :param loe:
         :param X:
         :param X_expert:
         :return:
@@ -412,10 +411,10 @@ class RuleGon:
 
         assert len(X) == len(X_expert), "X and X expert differ in length (Code: 3204823094)"
 
-        y_gon = gon.predict(X=X, X_expert=X_expert).astype(str)
+        y_loe = loe.predict(X=X, X_expert=X_expert).astype(str)
         y_self = self.predict(X_expert)
 
-        return sum(y_gon == y_self) / len(y_gon)
+        return sum(y_loe == y_self) / len(y_loe)
 
 
 def rules_from_concepts(concepts: List[Concept]) -> List[RuleClause]:
