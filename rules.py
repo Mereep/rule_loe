@@ -360,7 +360,7 @@ class RuleLoE:
                 info_dict = {
                     'Coverage in Percent': round(concept.coverage * 100, 2),
                     'Precision in Percent': round(concept.precision * 100, 2),
-                    'Nerd': '#'+ str(concept.nerd_idx+1),
+                    'Expert': '#'+ str(concept.nerd_idx+1),
                     'Prediction': str(concept.target_concept)}
 
                 data.append(OrderedDict(**rules_dict,
